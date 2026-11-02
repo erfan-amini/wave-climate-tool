@@ -2,6 +2,8 @@
 
 An open Streamlit application for wave climate projections: bias correction against a reference record, trend analysis of the annual means, and stationary and non-stationary extreme-value analysis, in one guided workflow. It accompanies the manuscript *A Unified Trend-Extreme Analysis Tool for Wave Climate Projection under Climate Change* (Shahbazbegian and Amini).
 
+Live app: https://wave-climate-tool.streamlit.app/ · Source: https://github.com/erfan-amini/wave-climate-tool
+
 ## Workflow
 
 | Step | What it does |
