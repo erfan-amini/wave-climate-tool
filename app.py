@@ -47,7 +47,8 @@ st.markdown("""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   html, body, [class*="css"], .stApp {font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif;}
-  .block-container {padding-top: 1.2rem; padding-bottom: 2.5rem; max-width: 1280px;}
+  .block-container {padding-top: 4.2rem; padding-bottom: 2.5rem; max-width: 1280px;}
+  header[data-testid="stHeader"] {background: #ffffff !important;}
   [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"] {display: none;}
   h1, h2, h3 {letter-spacing: -0.01em;}
   @keyframes fadeUp {from {opacity: 0; transform: translateY(18px);} to {opacity: 1; transform: none;}}
@@ -63,7 +64,8 @@ st.markdown("""
   .st-key-actions button {border-radius: 999px; padding: .55rem 1.3rem; font-weight: 600; transition: transform .15s ease;}
   .st-key-actions button:hover {transform: translateY(-2px);}
   /* top bar */
-  .st-key-topbar {position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.92); backdrop-filter: blur(8px);
+  div[data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {position: sticky; top: 3.75rem; z-index: 990; background: #ffffff;}
+  .st-key-topbar { background: #ffffff;
       border-bottom: 1px solid #e9eef3; padding: .35rem 0 .3rem 0; margin-bottom: .6rem;}
   .st-key-topbar button {border-radius: 999px;}
   .chip {display:inline-block; padding: .18rem .62rem; border-radius: 999px; background: #eef4fa; color: #0b5394; font-size: .78rem; font-weight: 600; margin-right: .35rem;}
@@ -175,13 +177,12 @@ def topbar():
             if v and v != S.variable:
                 S.variable = v
                 st.rerun()
-        n = len(S.records)
-        chips = [(f"{n} records", n > 0), ("validated", S.proj_validation is not None), ("trends", S.trend_table is not None),
-                 (f"{len(S.pot)} EVA fits", bool(S.pot)), (f"{len(S.ts)} non-stationary", bool(S.ts))]
-        st.markdown("".join(f"<span class='chip{'' if ok else ' off'}'>{t}</span>" for t, ok in chips), unsafe_allow_html=True)
+        global CHIPS
+        CHIPS = st.empty()   # filled at the end of the run, so it shows this run's results
 
 
 variable = S.variable
+CHIPS = None
 
 # ---------------------------------------------------------------------------
 # Home
@@ -692,3 +693,9 @@ elif S.page == "about":
         <p>Demonstration data: Copernicus Climate Change Service, <i>Ocean surface wave time series for the European coast</i> (Caires and Yan 2020). Generated using Copernicus Climate Change Service information 2020.
         Photos from Unsplash (Unsplash License): {", ".join(f"<a href='{v[2]}' target='_blank'>{v[1]}</a>" for v in PHOTOS.values())}.
         Icons: Material Symbols.</p></div>""", unsafe_allow_html=True)
+
+if CHIPS is not None:
+    n = len(S.records)
+    chips = [(f"{n} records", n > 0), ("validated", S.proj_validation is not None), ("trends", S.trend_table is not None),
+             (f"{len(S.pot)} EVA fits", bool(S.pot)), (f"{len(S.ts)} non-stationary", bool(S.ts))]
+    CHIPS.markdown("".join(f"<span class='chip{'' if ok else ' off'}'>{t}</span>" for t, ok in chips), unsafe_allow_html=True)
