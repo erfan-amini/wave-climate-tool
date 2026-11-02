@@ -1,0 +1,27 @@
+{
+  "stations": [
+    {
+      "id": "c3s_greenland_se",
+      "label": "Southeast Greenland (C3S station 65.6N, 37.9W)",
+      "lat": 65.6,
+      "lon": -37.9,
+      "source": "Copernicus C3S coastal wave time series (WAM forced by EURO-CORDEX HIRHAM5/EC-EARTH)",
+      "records": {
+        "Historical 2005": {"file": "data/historical_2005.csv.gz", "role": "model historical", "period": "2005"},
+        "RCP4.5": {"file": "data/rcp45_2041_2100.csv.gz", "role": "model future", "period": "2041 to 2100"},
+        "RCP8.5": {"file": "data/rcp85_2041_2100.csv.gz", "role": "model future", "period": "2041 to 2100"}
+      }
+    },
+    {
+      "id": "brisbane_buoy",
+      "label": "Brisbane, Australia (wave buoy, 2024)",
+      "lat": -27.5,
+      "lon": 153.6,
+      "source": "Queensland Government wave monitoring, raw export",
+      "records": {
+        "Brisbane 2024": {"file": "data/brisbane_2024.csv.gz", "role": "observed", "period": "2024"}
+      }
+    }
+  ],
+  "note": "Add a station by placing its files in data/ (or at a URL) and adding an entry here. Roles: observed, reference, model historical, model future."
+}
