@@ -17,7 +17,7 @@ Live app: https://wave-climate-tool.streamlit.app/ · Source: https://github.com
 ## Files
 
 ```
-app.py            Streamlit interface (five steps)
+app.py            Streamlit interface: landing page, five steps, team page
 analysis.py       loading, climatology, trends, POT-GPD, diagnostics
 projection.py     delta change, quantile delta mapping, split-sample validation, transformed-stationary EVA
 fetch.py          NDBC, Copernicus CDS (ERA5 point, C3S station), catalogue; also a command-line exporter

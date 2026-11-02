@@ -57,8 +57,8 @@ def record(s, name, variable, color=None, height=320):
     m, lo, hi = _display_series(s)
     fig = go.Figure()
     if lo is not None:
-        fig.add_trace(go.Scatter(x=hi.index, y=hi.values, line=dict(width=0), showlegend=False, hoverinfo="skip"))
-        fig.add_trace(go.Scatter(x=lo.index, y=lo.values, fill="tonexty", fillcolor=_rgba(color, 0.18), line=dict(width=0),
+        fig.add_trace(go.Scatter(x=hi.index, y=hi.values, mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"))
+        fig.add_trace(go.Scatter(x=lo.index, y=lo.values, fill="tonexty", mode="lines", fillcolor=_rgba(color, 0.18), line=dict(width=0),
                                  name="daily range", hoverinfo="skip"))
         fig.add_trace(go.Scatter(x=m.index, y=m.values, line=dict(color=color, width=1), name="daily mean"))
     else:
@@ -141,7 +141,7 @@ def return_levels(results, variable, height=420, ts_table=None):
         curve = A.return_level(res["threshold"], res["xi"], res["beta"], res["rate_per_year"], T)
         rp = res["return_periods"]
         fig.add_trace(go.Scatter(x=np.concatenate([rp, rp[::-1]]), y=np.concatenate([res["rl_ci"][1], res["rl_ci"][0][::-1]]),
-                                 fill="toself", fillcolor=_rgba(c, 0.15), line=dict(width=0), name=f"{name} bootstrap 95%", hoverinfo="skip"))
+                                 fill="toself", mode="lines", fillcolor=_rgba(c, 0.15), line=dict(width=0), name=f"{name} bootstrap 95%", hoverinfo="skip"))
         fig.add_trace(go.Scatter(x=T, y=curve, mode="lines", name=f"{name} fitted", line=dict(color=c, width=2.5)))
         ex, eT = res["empirical"]
         fig.add_trace(go.Scatter(x=eT, y=ex, mode="markers", name=f"{name} storm peaks", marker=dict(color=c, size=5, opacity=0.7)))
@@ -212,7 +212,7 @@ def ts_eva(ts, stationary, name, variable, T=100, height=400):
     col = f"RL_{T}"
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=np.concatenate([t.index, t.index[::-1]]), y=np.concatenate([t[f"{col}_hi"], t[f"{col}_lo"][::-1]]),
-                             fill="toself", fillcolor=_rgba(c, 0.15), line=dict(width=0), name="bootstrap 95%", hoverinfo="skip"))
+                             fill="toself", mode="lines", fillcolor=_rgba(c, 0.15), line=dict(width=0), name="bootstrap 95%", hoverinfo="skip"))
     fig.add_trace(go.Scatter(x=t.index, y=t[col], mode="lines", name=f"non-stationary {T}-year level", line=dict(color=c, width=2.5)))
     fig.add_hline(y=stationary, line=dict(color="#222222", dash="dash", width=1.5),
                   annotation_text=f"stationary {T}-year level {stationary:.2f}", annotation_position="bottom right")
