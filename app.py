@@ -225,7 +225,7 @@ def topbar():
                 go(pick)
         with c3:
             n = len(S.records)
-            last = S.results["finished"].strftime("%H:%M") if S.results else "none"
+            last = S.results["finished"].strftime("%H:%M UTC") if S.results else "none"
             st.markdown(f"<div class='small' style='text-align:right; padding-top:.45rem'>{n} records · last run {last}</div>", unsafe_allow_html=True)
 
 
@@ -255,7 +255,7 @@ def txt_return_levels(R):
     lines = ["Each line is the fitted Generalized Pareto distribution. The band is the bootstrap 95% interval. "
              "Dots are the storm peaks at their empirical return periods."]
     for n, r in R["pot"].items():
-        ub = "no upper bound" if not np.isfinite(r["upper_bound"]) else f"upper bound {r['upper_bound']:.1f} {u}"
+        ub = "no upper bound" if not np.isfinite(r["upper_bound"]) else f"upper bound {f2(r['upper_bound'])} {u}"
         lines.append(f"- **{n}**: threshold {f2(r['threshold'])} {u}, {r['n_peaks']} storms ({f2(r['rate_per_year'])} per year), "
                      f"shape ξ = {sg(r['xi'])} ({ub}).")
     return "\n".join(lines)
@@ -432,7 +432,7 @@ def html_report(R, F_):
 
     parts = [f"<html><head><meta charset='utf-8'><title>Wave climate report</title><style>{css}</style></head><body>",
              "<h1>Wave climate report</h1>",
-             f"<div class='meta'>Wave Climate Trend-Extreme Tool · {R['finished']:%Y-%m-%d %H:%M} · records: {', '.join(R['targets'])} · "
+             f"<div class='meta'>Wave Climate Trend-Extreme Tool · {R['finished']:%Y-%m-%d %H:%M} UTC · records: {', '.join(R['targets'])} · "
              f"threshold {o['percentile']:g}th percentile · storm gap {o['gap']} h · {o['n_boot']} bootstrap samples · correction: {CORRECTIONS[o['correction']]}</div>"]
     for nte in R["notes"]:
         parts.append(f"<p class='note'>{nte}</p>")
@@ -718,7 +718,7 @@ elif S.page == "results":
     else:
         o = R["opts"]
         var = o["variable"]
-        banner("Report", "storm", f"{', '.join(R['targets'])} · bias correction: {CORRECTIONS[o['correction']].lower()} · {R['finished']:%Y-%m-%d %H:%M}")
+        banner("Report", "storm", f"{', '.join(R['targets'])} · bias correction: {CORRECTIONS[o['correction']].lower()} · {R['finished']:%Y-%m-%d %H:%M} UTC")
         if "_export" not in R:  # build figures and exports once per run
             F0 = report_figures(R)
             h0 = html_report(R, F0)

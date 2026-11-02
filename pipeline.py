@@ -187,7 +187,7 @@ def run(records, targets, opts=None, progress=None):
                     R["bc"]["compare_pot"][(name, m)] = A.pot_analysis(sp, o["percentile"], o["gap"], return_periods=(100,), n_boot=o["n_boot"], seed=o["seed"])
 
     R["seconds"] = time.time() - t0
-    R["finished"] = pd.Timestamp.now()
+    R["finished"] = pd.Timestamp.now(tz="UTC")
     return R
 
 
