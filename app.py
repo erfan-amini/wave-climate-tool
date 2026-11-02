@@ -111,16 +111,9 @@ with st.sidebar:
     st.divider()
     variable = st.radio("Variable", ["swh", "tm"], format_func=lambda v: VARNAME[v], horizontal=True)
     st.divider()
-    n_rec = len(S.records)
     st.markdown("**Session**")
-    st.markdown(
-        "<div class='status'>"
-        f"<div>{'<span class=ok>●</span>' if n_rec else '<span class=no>○</span>'} {n_rec} record(s) loaded</div>"
-        f"<div>{'<span class=ok>●</span>' if S.proj_validation is not None else '<span class=no>○</span>'} bias correction validated</div>"
-        f"<div>{'<span class=ok>●</span>' if S.trend_table is not None else '<span class=no>○</span>'} trends computed</div>"
-        f"<div>{'<span class=ok>●</span>' if S.pot else '<span class=no>○</span>'} {len(S.pot)} extreme-value fit(s)</div>"
-        f"<div>{'<span class=ok>●</span>' if S.ts else '<span class=no>○</span>'} {len(S.ts)} non-stationary fit(s)</div>"
-        "</div>", unsafe_allow_html=True)
+    status_box = st.empty()   # filled at the end of the run, so it reflects this run's actions
+    n_rec = len(S.records)
     if n_rec and st.button("Reset session"):
         for k in list(S.keys()):
             del S[k]
@@ -584,3 +577,13 @@ elif page == "5 · Report":
 
 st.markdown("<hr style='margin-top:2rem;border-color:#e3e8ee'><p class='small' style='text-align:center'>Wave Climate Trend-Extreme Tool · "
             "Amirhussein Shahbazbegian and Erfan Amini · MIT License</p>", unsafe_allow_html=True)
+
+n_rec = len(S.records)
+status_box.markdown(
+    "<div class='status'>"
+    f"<div>{'<span class=ok>●</span>' if n_rec else '<span class=no>○</span>'} {n_rec} record(s) loaded</div>"
+    f"<div>{'<span class=ok>●</span>' if S.proj_validation is not None else '<span class=no>○</span>'} bias correction validated</div>"
+    f"<div>{'<span class=ok>●</span>' if S.trend_table is not None else '<span class=no>○</span>'} trends computed</div>"
+    f"<div>{'<span class=ok>●</span>' if S.pot else '<span class=no>○</span>'} {len(S.pot)} extreme-value fit(s)</div>"
+    f"<div>{'<span class=ok>●</span>' if S.ts else '<span class=no>○</span>'} {len(S.ts)} non-stationary fit(s)</div>"
+    "</div>", unsafe_allow_html=True)
