@@ -6,18 +6,20 @@ Live app: https://wave-climate-tool.streamlit.app/ · Source: https://github.com
 
 ## Workflow
 
-| Step | What it does |
+Three screens: **Setup**, **Results**, **Team**. The landing page has a one-click demo that loads the built-in records, runs the default analysis and opens the report.
+
+| Screen | What it does |
 |---|---|
-| **1 · Data** | Loads records from the built-in catalogue, from CSV uploads, from NOAA NDBC wave buoys (no key), or from the Copernicus Climate Data Store with the user's own key (ERA5 at a point; any station of the C3S coastal wave product). Each record gets a role: observed, reference, model historical, model future, projected. |
-| **2 · Projection** | Bias correction of a model series against a reference by **delta change** or **quantile delta mapping** (Cannon et al. 2015), by calendar month, multiplicative or additive. A split-sample test scores the raw model and both corrections on held-out years before anything is applied. Projected series join the session as records. |
-| **3 · Trends** | Annual means with an OLS trend and its 95% interval, the Mann-Kendall test, and Sen's slope with its interval. |
-| **4 · Extremes** | Peaks over threshold with runs declustering, GPD by maximum likelihood with the location fixed at the threshold, return levels from the storm rate with bootstrap intervals, mean residual life and parameter stability diagnostics, QQ plot, and a sensitivity grid. Below it, the **transformed-stationary** fit (Mentaschi et al. 2016) gives time-varying return levels. |
-| **5 · Report** | One interactive HTML report and one ZIP with every table, series and figure of the session. |
+| **Setup** | *Data*: the built-in catalogue, CSV uploads, NOAA NDBC wave buoys (no key), or the Copernicus Climate Data Store with the user's own key (ERA5 at a point; any station of the C3S coastal wave product). Each record has an editable role: observed, reference, model historical, model future, projected. *Options*: the records to analyse, bias correction (off, delta change, quantile delta mapping, or all three compared), and stationary or stationary plus non-stationary extremes. Threshold, storm gap, bootstrap size, return periods, non-stationary window, correction type, validation split, diagnostics and the extremes variable sit behind an **Advanced options** switch. One **Run analysis** button runs everything; identical runs are served from a cache. |
+| **Results** | A report. First the 10, 25, 50 and 100-year levels with 95% intervals for each record and a one-sentence summary. Then numbered sections, each with an explanation on the left built from the numbers and the figure on the right: design levels at a glance, return levels, change through time (transformed-stationary EVA), trends in the annual means, bias correction and its validation, correction methods compared, checks on the fit (storm peaks, QQ plot, threshold diagnostics, sensitivity grid), and the data used. One HTML report and one ZIP with every table, series and figure. |
+
+Methods: peaks over threshold with runs declustering, GPD by maximum likelihood with the location fixed at the threshold, return levels from the storm rate with bootstrap intervals (Coles 2001); transformed-stationary EVA (Mentaschi et al. 2016); delta change and quantile delta mapping by calendar month (Cannon et al. 2015) with a split-sample test on held-out years; OLS with its 95% interval, Mann-Kendall and Sen's slope for the annual means.
 
 ## Files
 
 ```
-app.py            Streamlit interface: landing page, five steps, team page
+app.py            Streamlit interface: landing page, Setup, Results report, Team
+pipeline.py       one-call analysis run used by the app (bias correction, trends, extremes, checks)
 analysis.py       loading, climatology, trends, POT-GPD, diagnostics
 projection.py     delta change, quantile delta mapping, split-sample validation, transformed-stationary EVA
 fetch.py          NDBC, Copernicus CDS (ERA5 point, C3S station), catalogue; also a command-line exporter
@@ -26,7 +28,7 @@ data/             demonstration records and catalogue.json
 .streamlit/       theme
 ```
 
-`analysis.py` and `projection.py` have no interface dependency. The manuscript's figure script imports them.
+`analysis.py`, `projection.py` and `pipeline.py` have no interface dependency. The manuscript's figure script imports them.
 
 ## Run locally
 

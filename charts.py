@@ -231,3 +231,82 @@ def ts_moments(ts, name, variable, height=300):
     fig.update_xaxes(title="Year", gridcolor="#eef1f4")
     fig.update_yaxes(gridcolor="#eef1f4")
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Report figures
+# ---------------------------------------------------------------------------
+
+def key_levels(levels_by_name, variable="swh", height=380):
+    """Dot and 95% whisker for each key return period, one colour per series.
+    levels_by_name: {name: {T: (level, lo, hi)}}."""
+    fig = go.Figure()
+    names = list(levels_by_name)
+    n = len(names)
+    for i, name in enumerate(names):
+        lv = levels_by_name[name]
+        Ts = list(lv)
+        x = [f"{T}-yr" for T in Ts]
+        y = [lv[T][0] for T in Ts]
+        lo = [lv[T][0] - lv[T][1] for T in Ts]
+        hi = [lv[T][2] - lv[T][0] for T in Ts]
+        fig.add_trace(go.Scatter(
+            x=x, y=y, mode="markers", name=name, offsetgroup=str(i),
+            marker=dict(color=color_for(name, i), size=11, line=dict(color="white", width=1)),
+            error_y=dict(type="data", symmetric=False, array=hi, arrayminus=lo, color=color_for(name, i), thickness=2, width=6),
+            hovertemplate="%{x}: %{y:.2f}<extra>" + name + "</extra>"))
+    fig.update_layout(scattermode="group", scattergap=0.55 if n > 1 else 0.9)
+    _fit_y(fig, [v for lv in levels_by_name.values() for t in lv.values() for v in (t[1], t[2])])
+    return _layout(fig, height, None, "Return period", f"{LABEL.get(variable, variable)} (95% interval)")
+
+
+def _fit_y(fig, values):
+    """Y range that frames the whiskers instead of starting at zero."""
+    v = [x for x in values if np.isfinite(x)]
+    if v:
+        lo, hi = min(v), max(v)
+        pad = 0.08 * (hi - lo if hi > lo else 1.0)
+        fig.update_yaxes(range=[lo - pad, hi + pad])
+
+
+def ts_eva_multi(ts_by_name, stationary_by_name, variable="swh", T=100, height=400):
+    """Time-varying T-year level for several series, each against its stationary level."""
+    fig = go.Figure()
+    col = f"RL_{T}"
+    for i, (name, ts) in enumerate(ts_by_name.items()):
+        c = color_for(name, i)
+        t = ts["table"]
+        fig.add_trace(go.Scatter(x=np.concatenate([t.index, t.index[::-1]]), y=np.concatenate([t[f"{col}_hi"], t[f"{col}_lo"][::-1]]),
+                                 fill="toself", mode="lines", fillcolor=_rgba(c, 0.10), line=dict(width=0), name=f"{name} 95%", hoverinfo="skip",
+                                 legendgroup=name, showlegend=False))
+        fig.add_trace(go.Scatter(x=t.index, y=t[col], mode="lines", name=f"{name} time-varying", line=dict(color=c, width=2.5), legendgroup=name,
+                                 hovertemplate="%{x}: %{y:.2f}<extra>" + name + "</extra>"))
+        st_rl = stationary_by_name.get(name)
+        if st_rl is not None:
+            fig.add_trace(go.Scatter(x=[t.index[0], t.index[-1]], y=[st_rl, st_rl], mode="lines", name=f"{name} stationary",
+                                     line=dict(color=c, width=1.5, dash="dash"), legendgroup=name, hovertemplate=f"stationary: {st_rl:.2f}<extra></extra>"))
+    return _layout(fig, height, None, "Year", f"{T}-year {LABEL.get(variable, variable)}")
+
+
+def method_compare(rl_by_scenario, variable="swh", height=340):
+    """100-year level with 95% whisker by correction method, grouped by scenario.
+    rl_by_scenario: {scenario: {method_label: (level, lo, hi)}}."""
+    fig = go.Figure()
+    methods = []
+    for d in rl_by_scenario.values():
+        for m in d:
+            if m not in methods:
+                methods.append(m)
+    for j, m in enumerate(methods):
+        xs, ys, lo, hi = [], [], [], []
+        for sc, d in rl_by_scenario.items():
+            if m in d:
+                xs.append(sc); ys.append(d[m][0]); lo.append(d[m][0] - d[m][1]); hi.append(d[m][2] - d[m][0])
+        c = FIXED.get(m, PALETTE[j % len(PALETTE)])
+        fig.add_trace(go.Scatter(x=xs, y=ys, mode="markers", name=m, offsetgroup=str(j),
+                                 marker=dict(color=c, size=11, line=dict(color="white", width=1)),
+                                 error_y=dict(type="data", symmetric=False, array=hi, arrayminus=lo, color=c, thickness=2, width=6),
+                                 hovertemplate="%{x}: %{y:.2f}<extra>" + m + "</extra>"))
+    fig.update_layout(scattermode="group", scattergap=0.5)
+    _fit_y(fig, [v for d in rl_by_scenario.values() for t in d.values() for v in (t[1], t[2])])
+    return _layout(fig, height, None, None, f"100-year {LABEL.get(variable, variable)}")
