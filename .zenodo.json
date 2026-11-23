@@ -1,0 +1,11 @@
+{
+  "title": "Wave Climate Trend-Extreme Tool",
+  "description": "An open Streamlit application for wave climate projections: bias correction against a reference record (delta change and quantile delta mapping, validated on held-out years), trend analysis of annual means (OLS, Mann-Kendall, Sen's slope), stationary and transformed-stationary peaks-over-threshold extreme-value analysis with bootstrap intervals and threshold diagnostics, and storm directions. This release accompanies the manuscript 'A Unified Trend-Extreme Analysis Tool for Wave Climate Projection under Climate Change' (Shahbazbegian and Amini) and contains the demonstration data and the scripts that reproduce every figure, table and number in the paper.",
+  "upload_type": "software",
+  "license": "MIT",
+  "creators": [
+    {"name": "Shahbazbegian, Amirhussein", "affiliation": "University of Tehran"},
+    {"name": "Amini, Erfan", "affiliation": "Columbia University"}
+  ],
+  "keywords": ["wave climate", "extreme value analysis", "peaks over threshold", "generalized Pareto distribution", "quantile delta mapping", "climate projections", "Streamlit"]
+}
