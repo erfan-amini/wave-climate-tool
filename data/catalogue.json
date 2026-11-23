@@ -1,15 +1,32 @@
 {
   "stations": [
     {
-      "id": "c3s_greenland_se",
-      "label": "Southeast Greenland (C3S station 65.6N, 37.9W)",
-      "lat": 65.6,
-      "lon": -37.9,
-      "source": "Copernicus C3S coastal wave time series (WAM forced by EURO-CORDEX HIRHAM5/EC-EARTH)",
+      "id": "c3s_egadi_west_sicily",
+      "label": "Egadi Islands, western Sicily (C3S station 3851, 38.0N 12.3E)",
+      "lat": 38.0,
+      "lon": 12.3,
+      "source": "Copernicus C3S coastal wave time series (WAM forced by EURO-CORDEX HIRHAM5/EC-EARTH); ERA5 reanalysis at 38.0N 12.0E as reference",
       "records": {
-        "Historical 2005": {"file": "data/historical_2005.csv.gz", "role": "model historical", "period": "2005"},
-        "RCP4.5": {"file": "data/rcp45_2041_2100.csv.gz", "role": "model future", "period": "2041 to 2100"},
-        "RCP8.5": {"file": "data/rcp85_2041_2100.csv.gz", "role": "model future", "period": "2041 to 2100"}
+        "ERA5 1976-2005": {
+          "file": "data/reference_era5_1976_2005.csv.gz",
+          "role": "reference",
+          "period": "1976 to 2005"
+        },
+        "Historical 1976-2005": {
+          "file": "data/historical_1976_2005.csv.gz",
+          "role": "model historical",
+          "period": "1976 to 2005"
+        },
+        "RCP4.5": {
+          "file": "data/rcp45_2041_2100.csv.gz",
+          "role": "model future",
+          "period": "2041 to 2100"
+        },
+        "RCP8.5": {
+          "file": "data/rcp85_2041_2100.csv.gz",
+          "role": "model future",
+          "period": "2041 to 2100"
+        }
       }
     },
     {
@@ -19,7 +36,11 @@
       "lon": 153.6,
       "source": "Queensland Government wave monitoring, raw export",
       "records": {
-        "Brisbane 2024": {"file": "data/brisbane_2024.csv.gz", "role": "observed", "period": "2024"}
+        "Brisbane 2024": {
+          "file": "data/brisbane_2024.csv.gz",
+          "role": "observed",
+          "period": "2024"
+        }
       }
     }
   ],

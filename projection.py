@@ -84,7 +84,10 @@ def delta_change(ref, hist, fut, kind="multiplicative"):
     return out, pd.DataFrame(rows)
 
 
-def quantile_delta_mapping(ref, hist, fut, kind="multiplicative", n_quantiles=None):
+QDM_TAIL_PROB = 0.99   # the correction factor is held constant above this monthly non-exceedance probability
+
+
+def quantile_delta_mapping(ref, hist, fut, kind="multiplicative", n_quantiles=None, tail_prob=QDM_TAIL_PROB):
     """Quantile delta mapping (Cannon et al. 2015), by calendar month.
 
     For every value in the model's future series: find its non-exceedance
@@ -100,6 +103,12 @@ def quantile_delta_mapping(ref, hist, fut, kind="multiplicative", n_quantiles=No
     fut: model series to correct (the future run, or a held-out part of the
     historical run for validation).
 
+    tail_prob: above this probability the empirical quantiles of a month rest
+    on few values and their ratio is noisy, so the correction factor (or
+    shift) is held at its value at tail_prob (constant extrapolation of the
+    correction; Themessl et al. 2012). The future tail then keeps the model's
+    own shape, scaled. Set to None to use the full empirical range.
+
     Returns the corrected Series over the period of fut.
     """
     out = fut.copy()
@@ -112,6 +121,8 @@ def quantile_delta_mapping(ref, hist, fut, kind="multiplicative", n_quantiles=No
             continue
         fs = np.sort(f.values)
         tau = _ecdf_prob(fs, f.values)
+        if tail_prob is not None:
+            tau = np.minimum(tau, tail_prob)
         q_hist = _ecdf_quantile(h, tau)
         q_ref = _ecdf_quantile(r, tau)
         if kind == "multiplicative":

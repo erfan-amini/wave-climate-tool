@@ -1,27 +1,28 @@
 """
 Data access for the Wave Climate Trend-Extreme Tool.
 
-Three sources, all written to the tool's CSV format (time, swh, tm[, tp]):
+Three sources, all written to the tool's CSV format (time, swh[, tm, dir]):
 
 1. NOAA NDBC wave buoys (no key): historical standard meteorological files by
    station and year.
 2. Copernicus Climate Data Store (user's own API key):
-   - ERA5 hourly single levels at a point (significant wave height and mean
-     wave period), year by year.
+   - ERA5 hourly significant wave height and mean wave direction at a point,
+     from the point time-series product (one request; about a minute).
    - C3S "Ocean surface wave time series for the European coast" (dataset
-     sis-ocean-wave-timeseries), nearest station to a point, for one
-     experiment and period.
+     sis-ocean-wave-timeseries): the station nearest to a point, for one
+     experiment and a range of years. The product is served as one file per
+     variable and year for the whole domain (about 0.5 GB each), so long
+     periods take hours; the function keeps one station and deletes each file.
 3. A catalogue of ready-made records (data/catalogue.json) that can point at
    files in the repository or at URLs.
 
 Command line (for one-off exports):
     python fetch.py ndbc --station 44025 --years 2015-2020 --out data/ndbc_44025.csv.gz
-    python fetch.py era5 --lat 40.5 --lon 2.0 --years 1979-2005 --out data/reference_era5_1979_2005.csv.gz
-    python fetch.py c3s  --lat 40.5 --lon 2.0 --experiment historical --period 1976_2005 --out data/historical_1976_2005.csv.gz
+    python fetch.py era5 --lat 38.0 --lon 12.0 --years 1976-2005 --out data/reference_era5_1976_2005.csv.gz
+    python fetch.py c3s  --lat 38.0 --lon 12.3 --experiment historical --years 1976-2005 --out data/historical_1976_2005.csv.gz
 
-The CDS commands need a key: pass --key "<uid>:<key>" or put it in ~/.cdsapirc.
-The request keys for the C3S dataset should be checked once against the
-"Show API request" button on its CDS page; they are set in C3S_REQUEST below.
+The CDS commands need a key: pass --key "<key>" or put it in ~/.cdsapirc, and
+accept each dataset's licence once on the CDS website.
 """
 
 import argparse
@@ -142,55 +143,47 @@ def _nearest_sea_point(ds, var, lat, lon):
 
 
 def fetch_era5_point(lat, lon, years, key=None, progress=None):
-    """ERA5 hourly significant wave height and mean wave period at the
-    nearest sea point, one CDS request per year. Returns (DataFrame, point)."""
-    import xarray as xr
+    """ERA5 hourly significant wave height and mean wave direction at the
+    nearest grid point, from the CDS point time-series product (one request,
+    typically about a minute for thirty years). Returns (DataFrame, point).
+    The ERA5 mean wave period is defined from a different spectral moment than
+    most model periods, so it is not returned as 'tm'."""
     c = cds_client(key)
-    frames, point = [], None
-    for k, y in enumerate(years):
-        req = {
-            "product_type": ["reanalysis"],
-            "variable": ["significant_height_of_combined_wind_waves_and_swell", "mean_wave_period"],
-            "year": [str(y)], "month": [f"{m:02d}" for m in range(1, 13)],
-            "day": [f"{d:02d}" for d in range(1, 32)], "time": [f"{h:02d}:00" for h in range(24)],
-            "area": [lat + 0.75, lon - 0.75, lat - 0.75, lon + 0.75],
-            "data_format": "netcdf", "download_format": "unarchived",
-        }
-        with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
-            target = tmp.name
-        c.retrieve("reanalysis-era5-single-levels", req, target)
-        ds = xr.open_dataset(target)
-        if point is None:
-            point = _nearest_sea_point(ds, "swh", lat, lon)
-        sub = ds.sel(point, method="nearest")
-        tname = "valid_time" if "valid_time" in sub.coords else "time"
-        frames.append(pd.DataFrame({"time": pd.to_datetime(sub[tname].values), "swh": sub["swh"].values.ravel(),
-                                    "tm": sub["mwp"].values.ravel()}))
-        ds.close()
-        os.remove(target)
+    years = list(years)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        target = os.path.join(tmpdir, "era5.zip")
         if progress:
-            progress((k + 1) / len(years), f"ERA5 {y} done")
-    df = pd.concat(frames, ignore_index=True).sort_values("time").drop_duplicates("time").reset_index(drop=True)
-    return df, point
+            progress(0.1, "request submitted to CDS")
+        c.retrieve("reanalysis-era5-single-levels-timeseries", {
+            "variable": ["significant_height_of_combined_wind_waves_and_swell", "mean_wave_direction"],
+            "location": {"latitude": float(lat), "longitude": float(lon)},
+            "date": [f"{years[0]}-01-01/{years[-1]}-12-31"],
+            "data_format": "csv",
+        }, target)
+        if progress:
+            progress(0.8, "download finished; reading")
+        if zipfile.is_zipfile(target):
+            with zipfile.ZipFile(target) as zf:
+                name = [n for n in zf.namelist() if n.endswith(".csv")][0]
+                zf.extract(name, tmpdir)
+                raw = pd.read_csv(os.path.join(tmpdir, name))
+        else:
+            raw = pd.read_csv(target)
+    df = pd.DataFrame({"time": pd.to_datetime(raw["valid_time"]), "swh": raw["swh"], "dir": raw["mwd"]})
+    point = (float(raw["latitude"].iloc[0]), float(raw["longitude"].iloc[0]))
+    if df["swh"].isna().all():
+        raise ValueError(f"ERA5 has no wave data at {point}; choose a point further offshore")
+    return df.sort_values("time").reset_index(drop=True), point
 
 
-# Request keys for the C3S coastal wave time series. Confirm once against
-# the "Show API request" button on the dataset's CDS page.
+# The C3S coastal wave time series: one file per variable and year for the
+# whole domain (7,708 stations, about 0.5 GB per variable and year).
 C3S_DATASET = "sis-ocean-wave-timeseries"
 C3S_REQUEST = {
-    "variable": ["significant_wave_height", "mean_wave_period"],
-    "experiment": {"historical": "historical", "reanalysis": "reanalysis", "rcp45": "rcp4_5", "rcp85": "rcp8_5"},
-    "period": {"historical": "1976_2005", "reanalysis": "2001_2017", "rcp45": "2041_2100", "rcp85": "2041_2100"},
-    "format": "zip",
+    "variable": {"swh": "Significant wave height", "tm": "Mean wave period", "dir": "Mean wave direction"},
+    "experiment": {"historical": "Historical", "reanalysis": "ERA5 reanalysis", "rcp45": "RCP4.5", "rcp85": "RCP8.5"},
+    "years": {"historical": (1976, 2005), "reanalysis": (2001, 2017), "rcp45": (2041, 2100), "rcp85": (2041, 2100)},
 }
-C3S_VARNAMES = {"swh": ("swh", "VHM0", "significant_wave_height"), "tm": ("mp1", "mwp", "VTM02", "mean_wave_period")}
-
-
-def _pick_var(ds, names):
-    for n in names:
-        if n in ds.data_vars:
-            return n
-    return None
 
 
 def _nearest_station(ds, lat, lon):
@@ -203,56 +196,46 @@ def _nearest_station(ds, lat, lon):
     return i, float(x[i]), float(y[i])
 
 
-def extract_c3s_station(zip_path, lat, lon):
-    """Read every NetCDF inside a C3S zip and return the nearest station's
-    time series as a DataFrame (time, swh, tm) plus the station location."""
+def _station_series(nc_path, lat, lon):
     import xarray as xr
-    pieces = {"swh": [], "tm": []}
+    ds = xr.open_dataset(nc_path)
+    i, sx, sy = _nearest_station(ds, lat, lon)
+    sdim = ds["station_x_coordinate"].dims[0]
+    v = [k for k in ds.data_vars if k != "missing_value" and sdim in ds[k].dims][0]
+    s = pd.Series(ds[v].isel({sdim: i}).values, index=pd.to_datetime(ds["time"].values))
+    ds.close()
+    return s, (sx, sy)
+
+
+def fetch_c3s_station(lat, lon, experiment="historical", years=None, variables=("swh", "tm", "dir"), key=None, progress=None):
+    """Download the C3S coastal wave product year by year, keep the station
+    nearest to (lat, lon) and delete each whole-domain file after use.
+    Returns (DataFrame with time and the requested variables, (lon, lat))."""
+    c = cds_client(key)
+    y0, y1 = C3S_REQUEST["years"][experiment]
+    years = [y for y in (years or range(y0, y1 + 1)) if y0 <= y <= y1]
+    if not years:
+        raise ValueError(f"{experiment} covers {y0} to {y1}")
+    pieces = {v: [] for v in variables}
     where = None
-    with zipfile.ZipFile(zip_path) as zf:
-        for name in zf.namelist():
-            if not name.endswith(".nc"):
-                continue
-            with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
-                tmp.write(zf.read(name))
-                target = tmp.name
-            ds = xr.open_dataset(target)
-            i, sx, sy = _nearest_station(ds, lat, lon)
-            where = (sx, sy)
-            sdim = [d for d in ds.dims if d.startswith("station")][0]
-            for key, names in C3S_VARNAMES.items():
-                v = _pick_var(ds, names)
-                if v is not None:
-                    sub = ds[v].isel({sdim: i})
-                    pieces[key].append(pd.Series(sub.values, index=pd.to_datetime(ds["time"].values)))
-            ds.close()
+    jobs = [(y, v) for y in years for v in variables]
+    for k, (y, v) in enumerate(jobs):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "c3s.zip")
+            c.retrieve(C3S_DATASET, {"variable": [C3S_REQUEST["variable"][v]], "experiment": C3S_REQUEST["experiment"][experiment],
+                                     "year": [str(y)]}, target)
+            with zipfile.ZipFile(target) as zf:
+                name = [n for n in zf.namelist() if n.endswith(".nc")][0]
+                zf.extract(name, tmpdir)
             os.remove(target)
-    out = pd.DataFrame({k: pd.concat(v).sort_index() for k, v in pieces.items() if v})
+            s, where = _station_series(os.path.join(tmpdir, name), lat, lon)
+            pieces[v].append(s)
+        if progress:
+            progress((k + 1) / len(jobs), f"{experiment} {y} {v} done")
+    out = pd.DataFrame({v: pd.concat(p).sort_index() for v, p in pieces.items() if p})
     out = out[~out.index.duplicated(keep="first")]
     out.index.name = "time"
     return out.reset_index(), where
-
-
-def fetch_c3s_station(lat, lon, experiment="historical", period=None, key=None, progress=None):
-    """Request one experiment of the C3S coastal wave product and extract the
-    nearest station. The whole-domain files are large; expect a long wait."""
-    c = cds_client(key)
-    req = {
-        "variable": C3S_REQUEST["variable"],
-        "experiment": [C3S_REQUEST["experiment"][experiment]],
-        "period": [period or C3S_REQUEST["period"][experiment]],
-        "format": C3S_REQUEST["format"],
-    }
-    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-        target = tmp.name
-    if progress:
-        progress(0.1, "request submitted to CDS; waiting in the queue")
-    c.retrieve(C3S_DATASET, req, target)
-    if progress:
-        progress(0.7, "download finished; extracting the nearest station")
-    df, where = extract_c3s_station(target, lat, lon)
-    os.remove(target)
-    return df, where
 
 
 # ---------------------------------------------------------------------------
@@ -291,13 +274,13 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("ndbc", help="NOAA NDBC buoy, historical files")
     a.add_argument("--station", required=True); a.add_argument("--years", required=True); a.add_argument("--out", required=True)
-    b = sub.add_parser("era5", help="ERA5 wave height and period at a point (CDS key needed)")
+    b = sub.add_parser("era5", help="ERA5 wave height and direction at a point (CDS key needed)")
     b.add_argument("--lat", type=float, required=True); b.add_argument("--lon", type=float, required=True)
     b.add_argument("--years", required=True); b.add_argument("--out", required=True); b.add_argument("--key")
     c = sub.add_parser("c3s", help="C3S coastal wave time series, nearest station (CDS key needed)")
     c.add_argument("--lat", type=float, required=True); c.add_argument("--lon", type=float, required=True)
     c.add_argument("--experiment", choices=list(C3S_REQUEST["experiment"]), default="historical")
-    c.add_argument("--period"); c.add_argument("--out", required=True); c.add_argument("--key")
+    c.add_argument("--years", help="e.g. 1976-2005; default: the whole experiment"); c.add_argument("--out", required=True); c.add_argument("--key")
     args = p.parse_args()
     if args.cmd == "ndbc":
         df, notes = fetch_ndbc(args.station, years_from_spec(args.years))
@@ -307,7 +290,7 @@ def main():
                                      progress=lambda f, m: print(f"{f:5.0%} {m}"))
         print("nearest ERA5 sea point:", point)
     else:
-        df, where = fetch_c3s_station(args.lat, args.lon, args.experiment, args.period, key=args.key,
+        df, where = fetch_c3s_station(args.lat, args.lon, args.experiment, years_from_spec(args.years) if args.years else None, key=args.key,
                                       progress=lambda f, m: print(f"{f:5.0%} {m}"))
         print("nearest C3S station (lon, lat):", where)
     write_record(df, args.out)

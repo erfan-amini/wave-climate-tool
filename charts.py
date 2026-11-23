@@ -11,7 +11,7 @@ from scipy.stats import genpareto
 import analysis as A
 
 PALETTE = ["#0b5394", "#c0392b", "#1a7f5a", "#b7791f", "#6b4c9a", "#2a9d8f", "#d16d9e", "#555555"]
-FIXED = {"RCP4.5": "#0b5394", "RCP8.5": "#c0392b", "Historical 2005": "#444444", "Brisbane 2024": "#1a7f5a",
+FIXED = {"RCP4.5": "#0b5394", "RCP8.5": "#c0392b", "Historical": "#8a8a8a", "ERA5": "#222222", "Brisbane 2024": "#1a7f5a",
          "reference": "#222222", "raw model": "#999999", "delta change": "#b7791f", "QDM": "#0b5394"}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 LABEL = {"swh": "H<sub>s</sub> [m]", "tm": "T<sub>m</sub> [s]", "tp": "T<sub>p</sub> [s]"}
@@ -310,3 +310,25 @@ def method_compare(rl_by_scenario, variable="swh", height=340):
     fig.update_layout(scattermode="group", scattergap=0.5)
     _fit_y(fig, [v for d in rl_by_scenario.values() for t in d.values() for v in (t[1], t[2])])
     return _layout(fig, height, None, None, f"100-year {LABEL.get(variable, variable)}")
+
+
+def direction_rose(dirs_by_name, height=380):
+    """Share of storm peaks (bars) and of all hours (line) by direction sector, per record."""
+    names = list(dirs_by_name)
+    fig = go.Figure()
+    for i, n in enumerate(names):
+        d = dirs_by_name[n]
+        theta = [k * 360.0 / len(d["sectors"]) for k in range(len(d["sectors"]))]
+        c = color_for(n, i)
+        fig.add_trace(go.Barpolar(r=d["storm_share"], theta=theta, name=f"{n}: storm peaks", marker_color=_rgba(c, 0.55),
+                                  marker_line_color=c, marker_line_width=1,
+                                  hovertemplate="%{customdata}: %{r:.1f}% of storms<extra>" + n + "</extra>", customdata=d["sectors"]))
+        fig.add_trace(go.Scatterpolar(r=list(d["all_share"]) + [d["all_share"][0]], theta=theta + [theta[0]], mode="lines",
+                                      line=dict(color=c, width=1.5, dash="dot"), name=f"{n}: all hours",
+                                      hovertemplate="%{r:.1f}% of hours<extra>" + n + "</extra>"))
+    fig.update_layout(polar=dict(angularaxis=dict(direction="clockwise", rotation=90, tickvals=[0, 45, 90, 135, 180, 225, 270, 315],
+                                                  ticktext=["N", "NE", "E", "SE", "S", "SW", "W", "NW"]),
+                                 radialaxis=dict(ticksuffix="%", angle=90)),
+                      barmode="overlay", height=height, margin=dict(l=30, r=30, t=30, b=70),
+                      legend=dict(orientation="h", y=-0.12, x=0.5, xanchor="center"), font=dict(family="Inter, Segoe UI, Helvetica, Arial"))
+    return fig

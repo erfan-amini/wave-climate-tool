@@ -139,7 +139,7 @@ def load_demo():
 
 
 def default_targets():
-    long = [n for n, r in S.records.items() if r["info"]["span_years"] >= 10]
+    long = [n for n, r in S.records.items() if r["info"]["span_years"] >= 10 and r["role"] != "model historical"]
     return long or list(S.records)
 
 
@@ -243,9 +243,12 @@ def txt_highlights(R):
     s = f"The 100-year {VARNAME[var]} is " + "; ".join(parts) + "."
     if len(lv) >= 2:
         vals = [v[100][0] for v in lv.values()]
-        half = min((v[100][2] - v[100][1]) / 2 for v in lv.values())
         spread = max(vals) - min(vals)
-        s += (f" The records differ by {f2(spread)} {u}, " + ("well inside the sampling uncertainty." if spread < half else "more than half an interval width."))
+        lows, highs = [v[100][1] for v in lv.values()], [v[100][2] for v in lv.values()]
+        overlap = np.isfinite(lows).all() and np.isfinite(highs).all() and max(lows) <= min(highs)
+        s += (f" The records differ by up to {f2(spread)} {u}; "
+              + ("their 95% intervals overlap, so the difference is not significant at that level." if overlap
+                 else "some of their 95% intervals do not overlap."))
     return s
 
 
@@ -258,6 +261,16 @@ def txt_return_levels(R):
         ub = "no upper bound" if not np.isfinite(r["upper_bound"]) else f"upper bound {f2(r['upper_bound'])} {u}"
         lines.append(f"- **{n}**: threshold {f2(r['threshold'])} {u}, {r['n_peaks']} storms ({f2(r['rate_per_year'])} per year), "
                      f"shape ξ = {sg(r['xi'])} ({ub}).")
+    return "\n".join(lines)
+
+
+def txt_dirs(R):
+    lines = ["Bars: share of storm peaks arriving from each 22.5-degree sector. Dotted line: share of all hours. "
+             "Directions are where the waves come from. The tool reports them; it does not fit return levels by sector."]
+    for n, d in R["dirs"].items():
+        lines.append(f"- **{n}**: {f2(d['dominant_share'])}% of {d['n_storms']} storms come from {d['dominant']}, "
+                     f"{f2(d['within_45'])}% within 45 degrees of it; mean storm direction {d['storm_mean']:.0f} degrees "
+                     f"against {d['all_mean']:.0f} degrees for all hours.")
     return "\n".join(lines)
 
 
@@ -373,6 +386,8 @@ def report_figures(R):
         F_["rl"] = C.return_levels(R["pot"], var)
     if R["ts"]:
         F_["ts"] = C.ts_eva_multi(R["ts"], {n: PL.key_levels(R["pot"][n])[100][0] for n in R["ts"]}, var)
+    if R.get("dirs"):
+        F_["dirs"] = C.direction_rose(R["dirs"])
     F_["trend_swh"] = C.annual_means(R["trends"]["swh"], "swh") if R["trends"]["swh"] else None
     F_["trend_tm"] = C.annual_means(R["trends"]["tm"], "tm") if R["trends"]["tm"] else None
     if R["bc"] is not None:
@@ -446,6 +461,8 @@ def html_report(R, F_):
         parts.append(sec(k, "Return levels", txt_return_levels(R), F_["rl"], rl_tab)); k += 1
     if "ts" in F_:
         parts.append(sec(k, "Change through time", txt_ts(R), F_["ts"])); k += 1
+    if "dirs" in F_:
+        parts.append(sec(k, "Where the storms come from", txt_dirs(R), F_["dirs"])); k += 1
     df_s, _ = trend_rows(R, "swh")
     df_t, _ = trend_rows(R, "tm")
     parts.append(sec(k, "Trends in the annual means", txt_trends(R), F_.get("trend_swh"),
@@ -470,6 +487,8 @@ def zip_bundle(R, F_, html):
             zf.writestr(f"storm_peaks/{n}.csv", r["peaks"].rename(R["opts"]["variable"]).to_csv())
         for n, ts in R["ts"].items():
             zf.writestr(f"nonstationary/{n}.csv", ts["table"].round(4).to_csv())
+        for n, d in R.get("dirs", {}).items():
+            zf.writestr(f"storm_directions/{n}.csv", d["peak_dir"].to_frame().join(R["pot"][n]["peaks"].rename(R["opts"]["variable"])).to_csv())
         for n, g in R["sens"].items():
             zf.writestr(f"sensitivity/{n}.csv", g.round(4).to_csv(index=False))
         for var in ("swh", "tm"):
@@ -609,11 +628,11 @@ elif S.page == "setup":
         else:
             key = st.text_input("CDS API key", type="password", help="Free account at cds.climate.copernicus.eu. Used for this request only.")
             c1, c2 = st.columns(2)
-            lat = c1.number_input("Latitude", -90.0, 90.0, 40.5, 0.1)
-            lon = c2.number_input("Longitude", -180.0, 180.0, 2.0, 0.1)
+            lat = c1.number_input("Latitude", -90.0, 90.0, 38.0, 0.1)
+            lon = c2.number_input("Longitude", -180.0, 180.0, 12.0, 0.1)
             prod = st.radio("Product", ["ERA5 at the point", "C3S coastal station"], horizontal=True, label_visibility="collapsed")
             if prod.startswith("ERA5"):
-                yrs = st.text_input("Years", "1979-2005", key="era5_years")
+                yrs = st.text_input("Years", "1976-2005", key="era5_years")
                 if st.button(":material/download: Request ERA5", type="primary"):
                     try:
                         prog = st.progress(0.0, "submitting")
@@ -626,10 +645,13 @@ elif S.page == "setup":
                         st.error(f"CDS request failed: {e}")
             else:
                 exp = st.selectbox("Experiment", list(F.C3S_REQUEST["experiment"]), format_func=lambda k: {"historical": "Historical 1976-2005", "reanalysis": "ERA5-forced 2001-2017", "rcp45": "RCP4.5 2041-2100", "rcp85": "RCP8.5 2041-2100"}[k])
+                y0, y1 = F.C3S_REQUEST["years"][exp]
+                c3s_years = st.text_input("Years", f"{y0}-{min(y0 + 1, y1)}", key="c3s_years",
+                                          help="The product comes as one file per variable and year for the whole European coast, about 0.5 GB each. A few years take minutes; decades take hours (use fetch.py for those).")
                 if st.button(":material/download: Request C3S station", type="primary"):
                     try:
                         prog = st.progress(0.0, "submitting")
-                        df, where = F.fetch_c3s_station(lat, lon, exp, key=key or None, progress=lambda f, m: prog.progress(f, m))
+                        df, where = F.fetch_c3s_station(lat, lon, exp, F.years_from_spec(c3s_years), key=key or None, progress=lambda f, m: prog.progress(f, m))
                         buf = io.StringIO(); df.to_csv(buf, index=False); buf.seek(0); buf.name = "c3s.csv"
                         df2, info = A.load_series(buf)
                         add_record(f"C3S {exp}", df2, info, "model historical" if exp == "historical" else "model future", "Copernicus C3S")
@@ -753,6 +775,8 @@ elif S.page == "results":
                            .rename(columns=RL_COLS(var)))
         if R["ts"]:
             section(k, "Change through time", txt_ts(R), F_["ts"]); k += 1
+        if F_.get("dirs") is not None:
+            section(k, "Where the storms come from", txt_dirs(R), F_["dirs"]); k += 1
         if F_.get("trend_swh") is not None:
             l, r = section(k, "Trends in the annual means", txt_trends(R)); k += 1
             with r:
