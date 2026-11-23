@@ -30,7 +30,7 @@ DEFAULTS = {
     "return_periods": (2, 5, 10, 25, 50, 100, 200),
     "nonstationary": True,
     "window": 30,
-    "correction": "off",          # off | delta | qdm | compare
+    "correction": "qdm",          # off | delta | qdm | compare
     "kind": "multiplicative",
     "split": "alternate",
     "diagnostics": True,
@@ -94,7 +94,7 @@ def run(records, targets, opts=None, progress=None):
     var = o["variable"]
     say = progress or (lambda msg: None)
     R = {"opts": o, "targets": list(targets), "series": {}, "role": {}, "trends": {"swh": {}, "tm": {}},
-         "pot": {}, "ts": {}, "diag": {}, "sens": {}, "skipped": {}, "bc": None, "notes": []}
+         "pot": {}, "ts": {}, "diag": {}, "sens": {}, "dirs": {}, "source": {}, "skipped": {}, "bc": None, "notes": []}
 
     # 1. Bias correction --------------------------------------------------
     primary_method = {"off": "raw", "delta": "delta", "qdm": "qdm", "compare": "qdm"}[o["correction"]]
@@ -129,6 +129,9 @@ def run(records, targets, opts=None, progress=None):
             label = f"{name} ({METHOD_LABEL[primary_method]})" if primary_method != "raw" else name
         R["series"][label] = s
         R["role"][label] = rec["role"]
+        # record that carries the time axis of this series (for directions)
+        R["source"][label] = (bc_inputs["ref_name"] if (bc_inputs is not None and primary_method == "delta"
+                                                        and rec["role"] == "model future" and not bc_inputs["synthetic"]) else name)
 
     # 2. Trends (both variables, on the series as recorded) -----------------
     say("Testing the annual means for trends")
@@ -173,6 +176,12 @@ def run(records, targets, opts=None, progress=None):
             say(f"Threshold diagnostics: {label}")
             R["diag"][label] = (A.mean_residual_life(s, np.arange(90, 99.91, 0.25)),
                                 A.parameter_stability(s, np.arange(97.0, 99.91, 0.2), o["gap"]))
+        src = records.get(R["source"].get(label, ""), None)
+        if src is not None and "dir" in src["df"].columns and src["df"]["dir"].notna().any():
+            try:
+                R["dirs"][label] = A.storm_directions(A.to_series(src["df"], "dir"), R["pot"][label])
+            except Exception as e:  # directions are a report extra; never stop the run
+                R["notes"].append(f"Storm directions skipped for {label}: {e}")
         if o["sensitivity"] and span >= 10:
             say(f"Sensitivity grid: {label}")
             R["sens"][label] = A.sensitivity_grid(s, (99.0, 99.5, 99.8), (24, 48, 72), T=100)

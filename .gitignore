@@ -1,3 +1,10 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# outputs of reproduce/make_figures.py and reproduce/shot_paper.py
+reproduce/images/
+reproduce/tables/
+reproduce/numbers.tex
+reproduce/numbers.json
+reproduce/app_*.png

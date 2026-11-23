@@ -31,6 +31,8 @@ TIME_NAMES = ["time", "date/time (aest)", "date/time", "datetime", "date", "time
 SWH_NAMES = ["swh", "hs", "hs (m)", "h(s)", "significant_wave_height", "significant wave height", "vhm0"]
 TM_NAMES = ["tm", "mp1", "tm (s)", "tm(s)", "mean_wave_period", "mean wave period", "vtm02", "tz", "tz (s)"]
 TP_NAMES = ["tp", "tp (s)", "peak period", "peak_period", "vtpk"]
+DIR_NAMES = ["dir", "mwd", "direction", "dir (deg)", "direction (deg)", "mean_wave_direction", "mean wave direction",
+             "dirm", "vmdr", "dm", "wave direction"]
 SENTINELS = [-99.9, -99.90, -99.0, -999.0, -9999.0]
 
 
@@ -51,7 +53,7 @@ def load_series(path_or_buffer):
     Tz; tp, Tp (s)). Missing-value sentinels (-99.9 and the like) become NaN.
 
     Returns (df, info). df has columns 'time' plus 'swh' and/or 'tm' (and 'tp'
-    when present), sorted by time with duplicate timestamps removed. info is a
+    and 'dir', the mean wave direction in degrees, when present), sorted by time with duplicate timestamps removed. info is a
     dict describing what was found.
     """
     name = getattr(path_or_buffer, "name", str(path_or_buffer))
@@ -63,7 +65,7 @@ def load_series(path_or_buffer):
 
     out = pd.DataFrame({"time": pd.to_datetime(raw[tcol], format="mixed", errors="coerce")})
     found = {}
-    for key, names in (("swh", SWH_NAMES), ("tm", TM_NAMES), ("tp", TP_NAMES)):
+    for key, names in (("swh", SWH_NAMES), ("tm", TM_NAMES), ("tp", TP_NAMES), ("dir", DIR_NAMES)):
         col = _match(raw.columns, names)
         if col is not None:
             vals = pd.to_numeric(raw[col], errors="coerce").replace(SENTINELS, np.nan)
@@ -274,6 +276,9 @@ def bootstrap_return_levels(exceedances, u, lam, T, n_boot=500, seed=0):
     rng = np.random.default_rng(seed)
     y = np.asarray(exceedances, dtype=float)
     T = np.atleast_1d(np.asarray(T, dtype=float))
+    if n_boot <= 0:
+        nan = np.full(len(T), np.nan)
+        return {"rl_lo": nan, "rl_hi": nan.copy(), "xi_lo": np.nan, "xi_hi": np.nan, "n_boot": 0}
     rl = np.empty((n_boot, len(T)))
     xis = np.empty(n_boot)
     for b in range(n_boot):
@@ -409,3 +414,56 @@ def qq_points(res):
     p = (np.arange(1, n + 1) - 0.5) / n
     fitted = genpareto.ppf(p, res["xi"], 0, res["beta"])
     return fitted, y
+
+
+# ---------------------------------------------------------------------------
+# Directions
+# ---------------------------------------------------------------------------
+
+SECTORS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+
+
+def circular_mean(deg):
+    """Mean of directions in degrees (0 to 360)."""
+    r = np.radians(np.asarray(deg, dtype=float))
+    r = r[np.isfinite(r)]
+    if r.size == 0:
+        return np.nan
+    return float(np.degrees(np.arctan2(np.sin(r).mean(), np.cos(r).mean())) % 360.0)
+
+
+def sector_shares(deg, n_sectors=16):
+    """Share (percent) of directions in each of n_sectors sectors centred on N, NNE, ..."""
+    d = np.asarray(deg, dtype=float)
+    d = d[np.isfinite(d)] % 360.0
+    width = 360.0 / n_sectors
+    k = np.floor(((d + width / 2.0) % 360.0) / width).astype(int)
+    counts = np.bincount(k, minlength=n_sectors)
+    return 100.0 * counts / max(len(d), 1)
+
+
+def storm_directions(direction, pot, n_sectors=16, window_hours=1):
+    """Directions at the storm peaks of a POT result.
+
+    direction: Series of mean wave direction (degrees, coming from) on the same
+    time axis as the series that was declustered. Returns a dict with the
+    direction of each storm peak, sector shares for the peaks and for all hours,
+    the dominant storm sector and the circular means. Directions describe where
+    the waves come from; the tool reports them, it does not fit return levels by
+    sector."""
+    peaks = pot["peaks"]
+    d = direction.reindex(peaks.index, method="nearest", tolerance=pd.Timedelta(hours=window_hours))
+    storm = d.values
+    all_hours = direction.values
+    s_share = sector_shares(storm, n_sectors)
+    a_share = sector_shares(all_hours, n_sectors)
+    names = SECTORS if n_sectors == 16 else [f"{i * 360 / n_sectors:.0f}" for i in range(n_sectors)]
+    top = int(np.argmax(s_share))
+    width = 360.0 / n_sectors
+    # share of storms within +/- 45 degrees of the dominant sector centre
+    centre = top * width
+    diff = np.abs(((storm - centre + 180.0) % 360.0) - 180.0)
+    within = float(100.0 * np.nanmean(diff <= 45.0)) if np.isfinite(storm).any() else np.nan
+    return {"peak_dir": pd.Series(storm, index=peaks.index, name="dir"), "storm_share": s_share, "all_share": a_share,
+            "sectors": names, "dominant": names[top], "dominant_share": float(s_share[top]), "within_45": within,
+            "storm_mean": circular_mean(storm), "all_mean": circular_mean(all_hours), "n_storms": int(np.isfinite(storm).sum())}
